@@ -14,10 +14,12 @@
     <form method="get" action="/" class="toolbar">
       <label for="scout_event_id">Scout Event ID</label>
       <input id="scout_event_id" name="scout_event_id" value="{{ scout_event_id }}" placeholder="UUID" required />
+      <label for="match_type">Match Type</label>
+      <input id="match_type" name="match_type" value="{{ match_type or '' }}" placeholder="Qualification / Practice / Match / Final" required />
       <button type="submit">Load</button>
-      {% if scout_event_id %}
-        <a class="download" href="/export/excel?scout_event_id={{ scout_event_id|urlencode }}">Download Excel</a>
-        <a class="download" href="/export/xml?scout_event_id={{ scout_event_id|urlencode }}">Download XML</a>
+      {% if scout_event_id and match_type %}
+        <a class="download" href="/export/excel?scout_event_id={{ scout_event_id|urlencode }}&match_type={{ match_type|urlencode }}">Download Excel</a>
+        <a class="download" href="/export/xml?scout_event_id={{ scout_event_id|urlencode }}&match_type={{ match_type|urlencode }}">Download XML</a>
       {% endif %}
     </form>
 
@@ -29,7 +31,7 @@
       <div class="match-nav">
         <span>Match page:</span>
         {% for n in match_numbers %}
-          <a class="match-link {% if n == selected_match %}active{% endif %}" href="/?scout_event_id={{ scout_event_id|urlencode }}&match_number={{ n }}">
+          <a class="match-link {% if n == selected_match %}active{% endif %}" href="/?scout_event_id={{ scout_event_id|urlencode }}&match_type={{ match_type|urlencode }}&match_number={{ n }}">
             {{ n }}
           </a>
         {% endfor %}
@@ -59,7 +61,7 @@
           </tbody>
         </table>
       </div>
-    {% elif scout_event_id %}
+    {% elif scout_event_id and match_type %}
       <p>No records found for this scout event.</p>
     {% endif %}
   </main>
