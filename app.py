@@ -25,18 +25,14 @@ FIELD_ROWS = [
 
 
 ("Autonomous","Shooter Type","autonomousShootertype"),
-("Autonomous","Shots Taken","autonomousShotstaken"),
-("Autonomous","Shot Volumes","autonomousShotvolumes"),
-("Autonomous","Subjective Accuracy","autonomousSubjectiveaccuracy"),
+("Autonomous","Fuel Out","autonomousShotstaken"),
+("Autonomous","Fuel In","autonomousShotvolumes"),
 
-("Teleop","Fuel Count","teleopFuelcount"),
+("Teleop","Fuel Out","teleopFuelcount"),
+("Teleop","Fuel In","teleopShotstaken"),
 ("Teleop","Human Fuel Count","teleopHumanfuelcount"),
 ("Teleop","Pass Bump","teleopPassbump"),
 ("Teleop","Pass Trench","teleopPasstrench"),
-("Teleop","Fetch Ball Preference","teleopFetchballpreference"),
-("Teleop","Shots Taken","teleopShotstaken"),
-("Teleop","Shot Volumes","teleopShotvolumes"),
-("Teleop","Subjective Accuracy","teleopSubjectiveaccuracy"),
 
 ("End&AfterGame","Tower Status","endAndAfterGameTowerstatus"),
 ("End&AfterGame","Climbing Time","endAndAfterGameClimbingtime"),
@@ -143,7 +139,6 @@ def load_match(event_id,match_type,match_number):
         else:
             match["blue"].append(r)
 
-    print(rows[0].keys())
 
     return match
 
@@ -262,7 +257,7 @@ def index():
 @app.get("/export/excel")
 def export_excel():
 
-    event_id=request.args.get("event_id")
+    event_id=request.args.get("scout_event_id")
     match_type=request.args.get("match_type")
     match_number=int(request.args.get("match_number"))
 
@@ -277,7 +272,6 @@ def export_excel():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition":f'attachment; filename="{name}"'}
     )
-
 
 @app.get("/export/xml")
 def export_xml():
