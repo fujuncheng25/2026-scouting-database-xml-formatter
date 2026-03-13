@@ -151,7 +151,9 @@ def resolve_columns(column_names: set[str]) -> dict[str, str]:
     }
 
 
-def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any]]:
+def load_records_by_event_and_type(
+    scout_event_id: str, match_type: str
+) -> OrderedDict[int, dict[str, Any]]:
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
@@ -167,6 +169,7 @@ def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any
             team_col = quote_ident(mapping["team"])
             event_col = quote_ident(mapping["event"])
             match_number_col = quote_ident(mapping["match_number"])
+            match_type_col = quote_ident(mapping["match_type"])
             alliance_col = quote_ident(mapping["alliance"])
 
             query = f"""
@@ -174,10 +177,11 @@ def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any
             FROM team_match_record r
             LEFT JOIN team t ON t.number = r.{team_col}
             WHERE r.{event_col} = %s
+              AND LOWER(CAST(r.{match_type_col} AS TEXT)) = LOWER(%s)
             ORDER BY r.{match_number_col} ASC, r.{alliance_col} ASC, COALESCE(t.number, r.{team_col}) ASC
             """
 
-            cursor.execute(query, (scout_event_id,))
+            cursor.execute(query, (scout_event_id, match_type))
             rows = cursor.fetchall()
 
     matches: OrderedDict[int, dict[str, Any]] = OrderedDict()
@@ -194,9 +198,7 @@ def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any
             else {}
         )
         end_payload = (
-            get_nested_dict(row, [mapping["end_json"]])
-            if mapping["end_json"]
-            else {}
+            get_nested_dict(row, [mapping["end_json"]]) if mapping["end_json"] else {}
         )
 
         normalized = {
@@ -237,10 +239,7 @@ def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any
             "teleop_human_fuel_count": (
                 get_value(row, [mapping["teleop_human_fuel_count"]])
                 if mapping["teleop_human_fuel_count"]
-                else pick_from_nested(
-                    teleop_payload,
-                    ["humanFuelCount", "human_fuel_count"],
-                )
+                else pick_from_nested(teleop_payload, ["humanFuelCount", "human_fuel_count"])
             ),
             "teleop_pass_bump": (
                 get_value(row, [mapping["teleop_pass_bump"]])
@@ -273,10 +272,7 @@ def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any
             "teleop_subjective_accuracy": (
                 get_value(row, [mapping["teleop_subjective_accuracy"]])
                 if mapping["teleop_subjective_accuracy"]
-                else pick_from_nested(
-                    teleop_payload,
-                    ["subjectiveAccuracy", "subjective_accuracy"],
-                )
+                else pick_from_nested(teleop_payload, ["subjectiveAccuracy", "subjective_accuracy"])
             ),
             "end_tower_status": (
                 get_value(row, [mapping["end_tower_status"]])
@@ -301,10 +297,7 @@ def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any
             "end_autonomous_move": (
                 get_value(row, [mapping["end_autonomous_move"]])
                 if mapping["end_autonomous_move"]
-                else pick_from_nested(
-                    end_payload,
-                    ["autonomousMove", "autonomous_move"],
-                )
+                else pick_from_nested(end_payload, ["autonomousMove", "autonomous_move"])
             ),
             "end_teleop_move": (
                 get_value(row, [mapping["end_teleop_move"]])
@@ -435,6 +428,7 @@ def create_xml(matches: OrderedDict[int, dict[str, Any]]) -> bytes:
 @app.get("/")
 def index():
     scout_event_id = (request.args.get("scout_event_id") or "").strip()
+    match_type = (request.args.get("match_type") or "").strip()
     selected_match_param = (request.args.get("match_number") or "").strip()
 
     matches: OrderedDict[int, dict[str, Any]] = OrderedDict()
@@ -444,9 +438,9 @@ def index():
     rows = []
     error = None
 
-    if scout_event_id:
+    if scout_event_id and match_type:
         try:
-            matches = load_records_by_event(scout_event_id)
+            matches = load_records_by_event_and_type(scout_event_id, match_type)
             match_numbers = list(matches.keys())
             if match_numbers:
                 if selected_match_param.isdigit() and int(selected_match_param) in matches:
@@ -461,6 +455,7 @@ def index():
     return render_template(
         "index.html",
         scout_event_id=scout_event_id,
+        match_type=match_type,
         match_numbers=match_numbers,
         selected_match=selected_match,
         columns=columns,
@@ -472,10 +467,11 @@ def index():
 @app.get("/export/excel")
 def export_excel():
     scout_event_id = (request.args.get("scout_event_id") or "").strip()
-    if not scout_event_id:
-        return Response("Missing scout_event_id", status=400)
+    match_type = (request.args.get("match_type") or "").strip()
+    if not scout_event_id or not match_type:
+        return Response("Missing scout_event_id or match_type", status=400)
 
-    matches = load_records_by_event(scout_event_id)
+    matches = load_records_by_event_and_type(scout_event_id, match_type)
     if not matches:
         return Response("No match records found", status=404)
 
@@ -493,10 +489,11 @@ def export_excel():
 @app.get("/export/xml")
 def export_xml():
     scout_event_id = (request.args.get("scout_event_id") or "").strip()
-    if not scout_event_id:
-        return Response("Missing scout_event_id", status=400)
+    match_type = (request.args.get("match_type") or "").strip()
+    if not scout_event_id or not match_type:
+        return Response("Missing scout_event_id or match_type", status=400)
 
-    matches = load_records_by_event(scout_event_id)
+    matches = load_records_by_event_and_type(scout_event_id, match_type)
     if not matches:
         return Response("No match records found", status=404)
 

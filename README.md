@@ -7,7 +7,7 @@ This repository is fully independent from `2026-scouting-backend` source code. I
 ## Features
 
 - Configure DB connection through `.env`
-- Filter by `scoutEventId`
+- Filter by `scoutEventId` + `matchType` (both must match)
 - Web UI pages by `matchNumber` (one page per match)
 - Headers like `Red Alliance 254` / `Blue Alliance 971` in the same cell
 - Bool output normalized from `0/1`/`true/false` to `No/Yes`
