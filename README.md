@@ -47,4 +47,5 @@ python app.py
 ## Notes
 
 - The app auto-detects camelCase or snake_case column naming for `team_match_record` embedded fields.
+- If embedded fields are stored as JSON objects (`autonomous`, `teleop`, `endAndAfterGame`), the app will also read nested values automatically.
 - If your schema differs significantly from `2026-scouting-backend`, update candidate column names in `app.py`.
