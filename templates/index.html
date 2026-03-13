@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team Match Record Exporter</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Team Match Record Exporter</h1>
+    <p class="hint">Read-only DB viewer/exporter by scout event ID. Bool fields are shown as Yes/No.</p>
+
+    <form method="get" action="/" class="toolbar">
+      <label for="scout_event_id">Scout Event ID</label>
+      <input id="scout_event_id" name="scout_event_id" value="{{ scout_event_id }}" placeholder="UUID" required />
+      <button type="submit">Load</button>
+      {% if scout_event_id %}
+        <a class="download" href="/export/excel?scout_event_id={{ scout_event_id|urlencode }}">Download Excel</a>
+        <a class="download" href="/export/xml?scout_event_id={{ scout_event_id|urlencode }}">Download XML</a>
+      {% endif %}
+    </form>
+
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+
+    {% if match_numbers|length > 0 %}
+      <div class="match-nav">
+        <span>Match page:</span>
+        {% for n in match_numbers %}
+          <a class="match-link {% if n == selected_match %}active{% endif %}" href="/?scout_event_id={{ scout_event_id|urlencode }}&match_number={{ n }}">
+            {{ n }}
+          </a>
+        {% endfor %}
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Section</th>
+              <th>Field</th>
+              {% for col in columns %}
+                <th>{{ col.label }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row[0] }}</td>
+                <td>{{ row[1] }}</td>
+                {% for cell in row[2:] %}
+                  <td>{{ cell }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif scout_event_id %}
+      <p>No records found for this scout event.</p>
+    {% endif %}
+  </main>
+</body>
+</html>

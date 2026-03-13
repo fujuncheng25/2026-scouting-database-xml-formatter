@@ -1,0 +1,90 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f7f7f8;
+  color: #111;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+h1 {
+  margin-bottom: 8px;
+}
+
+.hint {
+  margin-top: 0;
+  color: #444;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+
+input {
+  min-width: 320px;
+  padding: 8px;
+}
+
+button,
+.download,
+.match-link {
+  padding: 8px 12px;
+  border: 1px solid #bbb;
+  background: white;
+  text-decoration: none;
+  color: #111;
+  border-radius: 4px;
+}
+
+.match-link.active {
+  background: #111;
+  color: white;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  background: white;
+  border: 1px solid #d8d8d8;
+}
+
+table {
+  border-collapse: collapse;
+  min-width: 1100px;
+  width: 100%;
+}
+
+th,
+td {
+  border: 1px solid #e3e3e3;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+}
+
+.error {
+  border: 1px solid #c96;
+  background: #fff5e5;
+  padding: 10px;
+}
+
+.match-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
