@@ -68,17 +68,40 @@ def format_value(value: Any) -> str:
 
 
 def get_value(row: dict[str, Any], candidates: list[str]) -> Any:
+    lowered = {str(key).lower(): key for key in row.keys()}
     for name in candidates:
         if name in row:
             return row[name]
+        lowered_name = name.lower()
+        if lowered_name in lowered:
+            return row[lowered[lowered_name]]
+    return None
+
+
+def get_nested_dict(row: dict[str, Any], candidates: list[str]) -> dict[str, Any]:
+    value = get_value(row, candidates)
+    return value if isinstance(value, dict) else {}
+
+
+def pick_from_nested(payload: dict[str, Any], candidates: list[str]) -> Any:
+    lowered = {str(key).lower(): key for key in payload.keys()}
+    for name in candidates:
+        if name in payload:
+            return payload[name]
+        lowered_name = name.lower()
+        if lowered_name in lowered:
+            return payload[lowered[lowered_name]]
     return None
 
 
 def resolve_columns(column_names: set[str]) -> dict[str, str]:
+    actual_by_lower = {name.lower(): name for name in column_names}
+
     def pick(*candidates: str, required: bool = False) -> str | None:
         for candidate in candidates:
-            if candidate in column_names:
-                return candidate
+            exact = actual_by_lower.get(candidate.lower())
+            if exact is not None:
+                return exact
         if required:
             raise RuntimeError(
                 f"Required column not found. Expected one of: {', '.join(candidates)}"
@@ -93,6 +116,9 @@ def resolve_columns(column_names: set[str]) -> dict[str, str]:
         "alliance": pick("alliance", required=True),
         "team": pick("teamNumber", "team_number", required=True),
         "match_key": pick("matchKey", "match_key"),
+        "autonomous_json": pick("autonomous"),
+        "teleop_json": pick("teleop"),
+        "end_json": pick("endAndAfterGame", "end_and_after_game"),
         "auto_shooter_type": pick("autonomousShooterType", "autonomous_shooter_type"),
         "auto_shots_taken": pick("autonomousShotsTaken", "autonomous_shots_taken"),
         "auto_shot_volumes": pick("autonomousShotVolumes", "autonomous_shot_volumes"),
@@ -157,6 +183,22 @@ def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any
     matches: OrderedDict[int, dict[str, Any]] = OrderedDict()
 
     for row in rows:
+        autonomous_payload = (
+            get_nested_dict(row, [mapping["autonomous_json"]])
+            if mapping["autonomous_json"]
+            else {}
+        )
+        teleop_payload = (
+            get_nested_dict(row, [mapping["teleop_json"]])
+            if mapping["teleop_json"]
+            else {}
+        )
+        end_payload = (
+            get_nested_dict(row, [mapping["end_json"]])
+            if mapping["end_json"]
+            else {}
+        )
+
         normalized = {
             "id": get_value(row, [mapping["id"]]),
             "match_number": get_value(row, [mapping["match_number"]]),
@@ -164,25 +206,116 @@ def load_records_by_event(scout_event_id: str) -> OrderedDict[int, dict[str, Any
             "alliance": get_value(row, [mapping["alliance"]]),
             "team_number": get_value(row, ["joined_team_number", mapping["team"]]),
             "match_key": get_value(row, [mapping["match_key"]]) if mapping["match_key"] else None,
-            "auto_shooter_type": get_value(row, [mapping["auto_shooter_type"]]) if mapping["auto_shooter_type"] else None,
-            "auto_shots_taken": get_value(row, [mapping["auto_shots_taken"]]) if mapping["auto_shots_taken"] else None,
-            "auto_shot_volumes": get_value(row, [mapping["auto_shot_volumes"]]) if mapping["auto_shot_volumes"] else None,
-            "auto_subjective_accuracy": get_value(row, [mapping["auto_subjective_accuracy"]]) if mapping["auto_subjective_accuracy"] else None,
-            "teleop_fuel_count": get_value(row, [mapping["teleop_fuel_count"]]) if mapping["teleop_fuel_count"] else None,
-            "teleop_human_fuel_count": get_value(row, [mapping["teleop_human_fuel_count"]]) if mapping["teleop_human_fuel_count"] else None,
-            "teleop_pass_bump": get_value(row, [mapping["teleop_pass_bump"]]) if mapping["teleop_pass_bump"] else None,
-            "teleop_pass_trench": get_value(row, [mapping["teleop_pass_trench"]]) if mapping["teleop_pass_trench"] else None,
-            "teleop_fetch_ball_preference": get_value(row, [mapping["teleop_fetch_ball_preference"]]) if mapping["teleop_fetch_ball_preference"] else None,
-            "teleop_shots_taken": get_value(row, [mapping["teleop_shots_taken"]]) if mapping["teleop_shots_taken"] else None,
-            "teleop_shot_volumes": get_value(row, [mapping["teleop_shot_volumes"]]) if mapping["teleop_shot_volumes"] else None,
-            "teleop_subjective_accuracy": get_value(row, [mapping["teleop_subjective_accuracy"]]) if mapping["teleop_subjective_accuracy"] else None,
-            "end_tower_status": get_value(row, [mapping["end_tower_status"]]) if mapping["end_tower_status"] else None,
-            "end_climbing_time": get_value(row, [mapping["end_climbing_time"]]) if mapping["end_climbing_time"] else None,
-            "end_ranking_point": get_value(row, [mapping["end_ranking_point"]]) if mapping["end_ranking_point"] else None,
-            "end_coop_point": get_value(row, [mapping["end_coop_point"]]) if mapping["end_coop_point"] else None,
-            "end_autonomous_move": get_value(row, [mapping["end_autonomous_move"]]) if mapping["end_autonomous_move"] else None,
-            "end_teleop_move": get_value(row, [mapping["end_teleop_move"]]) if mapping["end_teleop_move"] else None,
-            "end_comments": get_value(row, [mapping["end_comments"]]) if mapping["end_comments"] else None,
+            "auto_shooter_type": (
+                get_value(row, [mapping["auto_shooter_type"]])
+                if mapping["auto_shooter_type"]
+                else pick_from_nested(autonomous_payload, ["shooterType", "shooter_type"])
+            ),
+            "auto_shots_taken": (
+                get_value(row, [mapping["auto_shots_taken"]])
+                if mapping["auto_shots_taken"]
+                else pick_from_nested(autonomous_payload, ["shotsTaken", "shots_taken"])
+            ),
+            "auto_shot_volumes": (
+                get_value(row, [mapping["auto_shot_volumes"]])
+                if mapping["auto_shot_volumes"]
+                else pick_from_nested(autonomous_payload, ["shotVolumes", "shot_volumes"])
+            ),
+            "auto_subjective_accuracy": (
+                get_value(row, [mapping["auto_subjective_accuracy"]])
+                if mapping["auto_subjective_accuracy"]
+                else pick_from_nested(
+                    autonomous_payload,
+                    ["subjectiveAccuracy", "subjective_accuracy"],
+                )
+            ),
+            "teleop_fuel_count": (
+                get_value(row, [mapping["teleop_fuel_count"]])
+                if mapping["teleop_fuel_count"]
+                else pick_from_nested(teleop_payload, ["fuelCount", "fuel_count"])
+            ),
+            "teleop_human_fuel_count": (
+                get_value(row, [mapping["teleop_human_fuel_count"]])
+                if mapping["teleop_human_fuel_count"]
+                else pick_from_nested(
+                    teleop_payload,
+                    ["humanFuelCount", "human_fuel_count"],
+                )
+            ),
+            "teleop_pass_bump": (
+                get_value(row, [mapping["teleop_pass_bump"]])
+                if mapping["teleop_pass_bump"]
+                else pick_from_nested(teleop_payload, ["passBump", "pass_bump"])
+            ),
+            "teleop_pass_trench": (
+                get_value(row, [mapping["teleop_pass_trench"]])
+                if mapping["teleop_pass_trench"]
+                else pick_from_nested(teleop_payload, ["passTrench", "pass_trench"])
+            ),
+            "teleop_fetch_ball_preference": (
+                get_value(row, [mapping["teleop_fetch_ball_preference"]])
+                if mapping["teleop_fetch_ball_preference"]
+                else pick_from_nested(
+                    teleop_payload,
+                    ["fetchBallPreference", "fetch_ball_preference"],
+                )
+            ),
+            "teleop_shots_taken": (
+                get_value(row, [mapping["teleop_shots_taken"]])
+                if mapping["teleop_shots_taken"]
+                else pick_from_nested(teleop_payload, ["shotsTaken", "shots_taken"])
+            ),
+            "teleop_shot_volumes": (
+                get_value(row, [mapping["teleop_shot_volumes"]])
+                if mapping["teleop_shot_volumes"]
+                else pick_from_nested(teleop_payload, ["shotVolumes", "shot_volumes"])
+            ),
+            "teleop_subjective_accuracy": (
+                get_value(row, [mapping["teleop_subjective_accuracy"]])
+                if mapping["teleop_subjective_accuracy"]
+                else pick_from_nested(
+                    teleop_payload,
+                    ["subjectiveAccuracy", "subjective_accuracy"],
+                )
+            ),
+            "end_tower_status": (
+                get_value(row, [mapping["end_tower_status"]])
+                if mapping["end_tower_status"]
+                else pick_from_nested(end_payload, ["towerStatus", "tower_status"])
+            ),
+            "end_climbing_time": (
+                get_value(row, [mapping["end_climbing_time"]])
+                if mapping["end_climbing_time"]
+                else pick_from_nested(end_payload, ["climbingTime", "climbing_time"])
+            ),
+            "end_ranking_point": (
+                get_value(row, [mapping["end_ranking_point"]])
+                if mapping["end_ranking_point"]
+                else pick_from_nested(end_payload, ["rankingPoint", "ranking_point"])
+            ),
+            "end_coop_point": (
+                get_value(row, [mapping["end_coop_point"]])
+                if mapping["end_coop_point"]
+                else pick_from_nested(end_payload, ["coopPoint", "coop_point"])
+            ),
+            "end_autonomous_move": (
+                get_value(row, [mapping["end_autonomous_move"]])
+                if mapping["end_autonomous_move"]
+                else pick_from_nested(
+                    end_payload,
+                    ["autonomousMove", "autonomous_move"],
+                )
+            ),
+            "end_teleop_move": (
+                get_value(row, [mapping["end_teleop_move"]])
+                if mapping["end_teleop_move"]
+                else pick_from_nested(end_payload, ["teleopMove", "teleop_move"])
+            ),
+            "end_comments": (
+                get_value(row, [mapping["end_comments"]])
+                if mapping["end_comments"]
+                else pick_from_nested(end_payload, ["comments"])
+            ),
         }
 
         match_number = normalized["match_number"]
