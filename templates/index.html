@@ -1,69 +1,158 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Team Match Record Exporter</title>
-  <link rel="stylesheet" href="/static/style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Match Record Exporter</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f4f4f4;
+margin:0;
+}
+
+.container{
+width:1200px;
+margin:auto;
+padding:30px;
+}
+
+.toolbar{
+display:flex;
+gap:10px;
+align-items:center;
+margin-bottom:20px;
+}
+
+input,select{
+padding:6px;
+}
+
+button{
+padding:6px 12px;
+cursor:pointer;
+}
+
+.download{
+padding:6px 12px;
+background:#3578ff;
+color:white;
+text-decoration:none;
+border-radius:4px;
+}
+
+.table-wrap{
+overflow:auto;
+background:white;
+padding:10px;
+}
+
+table{
+border-collapse:collapse;
+width:100%;
+}
+
+th,td{
+border:1px solid #ccc;
+padding:6px;
+text-align:center;
+}
+
+thead{
+background:#eee;
+}
+
+</style>
+
 </head>
+
 <body>
-  <main class="container">
-    <h1>Team Match Record Exporter</h1>
-    <p class="hint">Read-only DB viewer/exporter by scout event ID. Bool fields are shown as Yes/No.</p>
 
-    <form method="get" action="/" class="toolbar">
-      <label for="scout_event_id">Scout Event ID</label>
-      <input id="scout_event_id" name="scout_event_id" value="{{ scout_event_id }}" placeholder="UUID" required />
-      <label for="match_type">Match Type</label>
-      <input id="match_type" name="match_type" value="{{ match_type or '' }}" placeholder="Qualification / Practice / Match / Final" required />
-      <button type="submit">Load</button>
-      {% if scout_event_id and match_type %}
-        <a class="download" href="/export/excel?scout_event_id={{ scout_event_id|urlencode }}&match_type={{ match_type|urlencode }}">Download Excel</a>
-        <a class="download" href="/export/xml?scout_event_id={{ scout_event_id|urlencode }}&match_type={{ match_type|urlencode }}">Download XML</a>
-      {% endif %}
-    </form>
+<main class="container">
 
-    {% if error %}
-      <div class="error">{{ error }}</div>
-    {% endif %}
+<h1>Team Match Record Exporter</h1>
 
-    {% if match_numbers|length > 0 %}
-      <div class="match-nav">
-        <span>Match page:</span>
-        {% for n in match_numbers %}
-          <a class="match-link {% if n == selected_match %}active{% endif %}" href="/?scout_event_id={{ scout_event_id|urlencode }}&match_type={{ match_type|urlencode }}&match_number={{ n }}">
-            {{ n }}
-          </a>
-        {% endfor %}
-      </div>
+<form method="get" action="/" class="toolbar">
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Section</th>
-              <th>Field</th>
-              {% for col in columns %}
-                <th>{{ col.label }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in rows %}
-              <tr>
-                <td>{{ row[0] }}</td>
-                <td>{{ row[1] }}</td>
-                {% for cell in row[2:] %}
-                  <td>{{ cell }}</td>
-                {% endfor %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% elif scout_event_id and match_type %}
-      <p>No records found for this scout event.</p>
-    {% endif %}
-  </main>
+<label>Scout Event ID</label>
+<input name="scout_event_id" value="{{ scout_event_id }}" required>
+
+<label>Match Type</label>
+<select name="match_type" required>
+<option value="">Select</option>
+<option value="Q" {% if match_type=="Q" %}selected{% endif %}>Q</option>
+<option value="P" {% if match_type=="P" %}selected{% endif %}>P</option>
+<option value="M" {% if match_type=="M" %}selected{% endif %}>M</option>
+<option value="F" {% if match_type=="F" %}selected{% endif %}>F</option>
+</select>
+
+<label>Match Number</label>
+<input name="match_number" type="number" value="{{ match_number }}" required>
+
+<button type="submit">Load</button>
+
+{% if scout_event_id and match_type and match_number %}
+
+<a class="download"
+href="/export/excel?scout_event_id={{ scout_event_id }}&match_type={{ match_type }}&match_number={{ match_number }}">
+Download Excel
+</a>
+
+<a class="download"
+href="/export/xml?scout_event_id={{ scout_event_id }}&match_type={{ match_type }}&match_number={{ match_number }}">
+Download XML
+</a>
+
+{% endif %}
+
+</form>
+
+{% if rows %}
+
+<div class="table-wrap">
+
+<table>
+
+<thead>
+<tr>
+<th>Section</th>
+<th>Field</th>
+
+{% for col in columns %}
+<th>{{ col.label }}</th>
+{% endfor %}
+
+</tr>
+</thead>
+
+<tbody>
+
+{% for row in rows %}
+
+<tr>
+
+<td>{{ row[0] }}</td>
+<td>{{ row[1] }}</td>
+
+{% for cell in row[2:] %}
+<td>{{ cell }}</td>
+{% endfor %}
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+{% endif %}
+
+</main>
+
 </body>
 </html>
