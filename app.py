@@ -251,25 +251,26 @@ def fill_sheet(ws, match):
             ws.cell(row=r_i, column=c_i, value=val)
 
 
-def create_excel(matches):
+def create_excel(matches, match_type_code):
     wb = Workbook()
+    sheet_prefix = (match_type_code or "M").strip().upper()[:1] or "M"
 
     if not matches:
         ws = wb.active
-        ws.title = "No Data"
+        ws.title = f"{sheet_prefix}NoData"
         ws.cell(row=1, column=1, value="No data found")
     else:
         sorted_items = sorted(matches.items(), key=lambda item: (item[0] is None, item[0]))
 
         first_match_number, first_match = sorted_items[0]
-        first_title = "Match Unknown" if first_match_number is None else f"Match {first_match_number}"
+        first_title = f"{sheet_prefix}Unknown" if first_match_number is None else f"{sheet_prefix}{first_match_number}"
 
         ws = wb.active
         ws.title = first_title[:31]
         fill_sheet(ws, first_match)
 
         for match_number, match in sorted_items[1:]:
-            title = "Match Unknown" if match_number is None else f"Match {match_number}"
+            title = f"{sheet_prefix}Unknown" if match_number is None else f"{sheet_prefix}{match_number}"
             page = wb.create_sheet(title=title[:31])
             fill_sheet(page, match)
 
@@ -346,7 +347,7 @@ def export_excel():
 
     matches=load_matches(event_id,match_type,match_number)
 
-    data=create_excel(matches)
+    data=create_excel(matches, match_type)
 
     if match_number is None:
         name=f"matches_{datetime.now().strftime('%Y%m%d')}.xlsx"
