@@ -183,7 +183,7 @@ document.querySelectorAll(".editable-cell").forEach((cell) => {
 		setStatus(`Saving ${fieldKey}...`);
 		try {
 			await postJson("/api/edit", {
-				record_id: Number(recordId),
+				record_id: recordId,
 				field_key: fieldKey,
 				field_value: fieldValue
 			});

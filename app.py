@@ -71,49 +71,187 @@ def get_local_db():
     )
 
 
+def get_column_type(cur, table_name, column_name):
+    cur.execute(
+        """
+        SELECT data_type
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = %s
+          AND column_name = %s
+        """,
+        (table_name, column_name),
+    )
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def create_local_snapshot_tables(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS local_snapshots (
+            remote_record_id TEXT PRIMARY KEY,
+            scout_event_id TEXT NOT NULL,
+            match_type_code TEXT NOT NULL,
+            match_number INTEGER,
+            team_number TEXT,
+            alliance TEXT,
+            payload JSONB NOT NULL,
+            remote_updated_at TIMESTAMPTZ NOT NULL,
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_local_snapshots_lookup
+        ON local_snapshots (scout_event_id, match_type_code, match_number);
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS local_edits (
+            id BIGSERIAL PRIMARY KEY,
+            remote_record_id TEXT NOT NULL REFERENCES local_snapshots(remote_record_id) ON DELETE CASCADE,
+            field_key TEXT NOT NULL,
+            field_value TEXT,
+            editor TEXT NOT NULL DEFAULT 'anonymous',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (remote_record_id, field_key)
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_local_edits_lookup
+        ON local_edits (remote_record_id, field_key);
+        """
+    )
+
+
+def migrate_local_snapshot_tables(cur):
+    snapshot_id_type = get_column_type(cur, "local_snapshots", "remote_record_id")
+    edits_id_type = get_column_type(cur, "local_edits", "remote_record_id")
+
+    if snapshot_id_type in (None, "text") and edits_id_type in (None, "text"):
+        create_local_snapshot_tables(cur)
+        return
+
+    cur.execute("DROP TABLE IF EXISTS local_edits_text_migration")
+    cur.execute("DROP TABLE IF EXISTS local_snapshots_text_migration")
+
+    cur.execute(
+        """
+        CREATE TABLE local_snapshots_text_migration (
+            remote_record_id TEXT PRIMARY KEY,
+            scout_event_id TEXT NOT NULL,
+            match_type_code TEXT NOT NULL,
+            match_number INTEGER,
+            team_number TEXT,
+            alliance TEXT,
+            payload JSONB NOT NULL,
+            remote_updated_at TIMESTAMPTZ NOT NULL,
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        """
+        INSERT INTO local_snapshots_text_migration (
+            remote_record_id,
+            scout_event_id,
+            match_type_code,
+            match_number,
+            team_number,
+            alliance,
+            payload,
+            remote_updated_at,
+            synced_at
+        )
+        SELECT
+            remote_record_id::text,
+            scout_event_id,
+            match_type_code,
+            match_number,
+            team_number,
+            alliance,
+            payload,
+            remote_updated_at,
+            synced_at
+        FROM local_snapshots
+        ON CONFLICT (remote_record_id) DO NOTHING
+        """
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE local_edits_text_migration (
+            id BIGSERIAL PRIMARY KEY,
+            remote_record_id TEXT NOT NULL,
+            field_key TEXT NOT NULL,
+            field_value TEXT,
+            editor TEXT NOT NULL DEFAULT 'anonymous',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (remote_record_id, field_key)
+        )
+        """
+    )
+    if edits_id_type is not None:
+        cur.execute(
+            """
+            INSERT INTO local_edits_text_migration (
+                remote_record_id,
+                field_key,
+                field_value,
+                editor,
+                updated_at
+            )
+            SELECT
+                remote_record_id::text,
+                field_key,
+                field_value,
+                editor,
+                updated_at
+            FROM local_edits
+            ON CONFLICT (remote_record_id, field_key)
+            DO UPDATE SET
+                field_value = EXCLUDED.field_value,
+                editor = EXCLUDED.editor,
+                updated_at = EXCLUDED.updated_at
+            """
+        )
+
+    cur.execute("DROP TABLE IF EXISTS local_edits")
+    cur.execute("DROP TABLE IF EXISTS local_snapshots")
+    cur.execute("ALTER TABLE local_snapshots_text_migration RENAME TO local_snapshots")
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_local_snapshots_lookup
+        ON local_snapshots (scout_event_id, match_type_code, match_number)
+        """
+    )
+    cur.execute("ALTER TABLE local_edits_text_migration RENAME TO local_edits")
+    cur.execute(
+        """
+        ALTER TABLE local_edits
+        ADD CONSTRAINT local_edits_remote_record_id_fkey
+        FOREIGN KEY (remote_record_id)
+        REFERENCES local_snapshots(remote_record_id)
+        ON DELETE CASCADE
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_local_edits_lookup
+        ON local_edits (remote_record_id, field_key)
+        """
+    )
+
+
 def ensure_local_schema():
     conn = get_local_db()
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS local_snapshots (
-                remote_record_id BIGINT PRIMARY KEY,
-                scout_event_id TEXT NOT NULL,
-                match_type_code TEXT NOT NULL,
-                match_number INTEGER,
-                team_number TEXT,
-                alliance TEXT,
-                payload JSONB NOT NULL,
-                remote_updated_at TIMESTAMPTZ NOT NULL,
-                synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-            """
-        )
-        cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_local_snapshots_lookup
-            ON local_snapshots (scout_event_id, match_type_code, match_number);
-            """
-        )
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS local_edits (
-                id BIGSERIAL PRIMARY KEY,
-                remote_record_id BIGINT NOT NULL REFERENCES local_snapshots(remote_record_id) ON DELETE CASCADE,
-                field_key TEXT NOT NULL,
-                field_value TEXT,
-                editor TEXT NOT NULL DEFAULT 'anonymous',
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (remote_record_id, field_key)
-            );
-            """
-        )
-        cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_local_edits_lookup
-            ON local_edits (remote_record_id, field_key);
-            """
-        )
+        migrate_local_snapshot_tables(cur)
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS local_users (
@@ -255,8 +393,8 @@ def sync_remote_to_local(event_id, match_type_code, match_number=None):
     changed_count = 0
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         for row in rows:
-            remote_record_id = get_remote_value(row, "id")
-            if remote_record_id is None:
+            remote_record_id = str(get_remote_value(row, "id") or "")
+            if not remote_record_id:
                 continue
 
             current_payload = dict(row)
@@ -362,7 +500,7 @@ def fetch_effective_matches(event_id, match_type_code, match_number=None):
                 """
                 SELECT remote_record_id, field_key, field_value, updated_at
                 FROM local_edits
-                WHERE remote_record_id = ANY(%s::bigint[])
+                WHERE remote_record_id = ANY(%s::text[])
                 ORDER BY updated_at DESC
                 """,
                 (record_ids,),
