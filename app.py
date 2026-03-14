@@ -108,23 +108,33 @@ def get_value(record, key):
 
 
 def load_match(event_id,match_type,match_number):
-
     db_type=MATCH_TYPE_MAP.get(match_type)
 
     conn=get_db()
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
-        cur.execute("""
+        if match_number is None:
+            cur.execute("""
 
-        SELECT *
-        FROM team_match_record
-        WHERE "scoutEventId"=%s
-        AND "matchType"=%s
-        AND "matchNumber"=%s
-        ORDER BY "alliance","teamNumber"
+            SELECT *
+            FROM team_match_record
+            WHERE "scoutEventId"=%s
+            AND "matchType"=%s
+            ORDER BY "alliance","teamNumber"
 
-        """,(event_id,db_type,match_number))
+            """,(event_id,db_type))
+        else:
+            cur.execute("""
+
+                SELECT *
+                FROM team_match_record
+                WHERE "scoutEventId"=%s
+                AND "matchType"=%s
+                AND "matchNumber"=%s
+                ORDER BY "alliance","teamNumber"
+
+            """,(event_id,db_type,match_number))
 
         rows=cur.fetchall()
 
@@ -141,6 +151,54 @@ def load_match(event_id,match_type,match_number):
 
 
     return match
+
+
+def load_matches(event_id, match_type, match_number=None):
+    db_type = MATCH_TYPE_MAP.get(match_type)
+
+    conn = get_db()
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        if match_number is None:
+            cur.execute(
+                """
+                SELECT *
+                FROM team_match_record
+                WHERE "scoutEventId"=%s
+                AND "matchType"=%s
+                ORDER BY "matchNumber", "alliance", "teamNumber"
+                """,
+                (event_id, db_type),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT *
+                FROM team_match_record
+                WHERE "scoutEventId"=%s
+                AND "matchType"=%s
+                AND "matchNumber"=%s
+                ORDER BY "alliance", "teamNumber"
+                """,
+                (event_id, db_type, match_number),
+            )
+
+        rows = cur.fetchall()
+
+    conn.close()
+
+    matches = {}
+
+    for r in rows:
+        current_match_number = r.get("matchNumber")
+        match = matches.setdefault(current_match_number, {"red": [], "blue": []})
+
+        if "red" in str(r["alliance"]).lower():
+            match["red"].append(r)
+        else:
+            match["blue"].append(r)
+
+    return dict(sorted(matches.items(), key=lambda item: (item[0] is None, item[0])))
 
 
 def build_matrix(match):
@@ -179,25 +237,43 @@ def build_matrix(match):
     return columns,rows
 
 
-def create_excel(match):
+def fill_sheet(ws, match):
+    columns, rows = build_matrix(match)
 
-    wb=Workbook()
-    ws=wb.active
+    ws.cell(row=1, column=1, value="Section")
+    ws.cell(row=1, column=2, value="Field")
 
-    columns,rows=build_matrix(match)
+    for i, c in enumerate(columns, start=3):
+        ws.cell(row=1, column=i, value=c["label"])
 
-    ws.cell(row=1,column=1,value="Section")
-    ws.cell(row=1,column=2,value="Field")
+    for r_i, row in enumerate(rows, start=2):
+        for c_i, val in enumerate(row, start=1):
+            ws.cell(row=r_i, column=c_i, value=val)
 
-    for i,c in enumerate(columns,start=3):
-        ws.cell(row=1,column=i,value=c["label"])
 
-    for r_i,row in enumerate(rows,start=2):
+def create_excel(matches):
+    wb = Workbook()
 
-        for c_i,val in enumerate(row,start=1):
-            ws.cell(row=r_i,column=c_i,value=val)
+    if not matches:
+        ws = wb.active
+        ws.title = "No Data"
+        ws.cell(row=1, column=1, value="No data found")
+    else:
+        sorted_items = sorted(matches.items(), key=lambda item: (item[0] is None, item[0]))
 
-    bio=io.BytesIO()
+        first_match_number, first_match = sorted_items[0]
+        first_title = "Match Unknown" if first_match_number is None else f"Match {first_match_number}"
+
+        ws = wb.active
+        ws.title = first_title[:31]
+        fill_sheet(ws, first_match)
+
+        for match_number, match in sorted_items[1:]:
+            title = "Match Unknown" if match_number is None else f"Match {match_number}"
+            page = wb.create_sheet(title=title[:31])
+            fill_sheet(page, match)
+
+    bio = io.BytesIO()
     wb.save(bio)
 
     return bio.getvalue()
@@ -234,23 +310,29 @@ def index():
 
     event_id=request.args.get("scout_event_id")
     match_type=request.args.get("match_type")
-    match_number=request.args.get("match_number")
+    match_number_raw=(request.args.get("match_number") or "").strip()
+    match_number=int(match_number_raw) if match_number_raw else None
 
-    columns=[]
-    rows=[]
+    pages=[]
 
-    if event_id and match_type and match_number:
+    if event_id and match_type:
 
-        match=load_match(event_id,match_type,int(match_number))
-        columns,rows=build_matrix(match)
+        matches=load_matches(event_id,match_type,match_number)
+
+        for current_match_number, match in matches.items():
+            columns,rows=build_matrix(match)
+            pages.append({
+                "match_number":current_match_number,
+                "columns":columns,
+                "rows":rows
+            })
 
     return render_template(
         "index.html",
-        columns=columns,
-        rows=rows,
+        pages=pages,
         scout_event_id=event_id,
         match_type=match_type,
-        match_number=match_number
+        match_number=match_number_raw
     )
 
 
@@ -259,13 +341,17 @@ def export_excel():
 
     event_id=request.args.get("scout_event_id")
     match_type=request.args.get("match_type")
-    match_number=int(request.args.get("match_number"))
+    match_number_raw=(request.args.get("match_number") or "").strip()
+    match_number=int(match_number_raw) if match_number_raw else None
 
-    match=load_match(event_id,match_type,match_number)
+    matches=load_matches(event_id,match_type,match_number)
 
-    data=create_excel(match)
+    data=create_excel(matches)
 
-    name=f"match_{match_number}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    if match_number is None:
+        name=f"matches_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    else:
+        name=f"match_{match_number}_{datetime.now().strftime('%Y%m%d')}.xlsx"
 
     return Response(
         data,
@@ -276,7 +362,7 @@ def export_excel():
 @app.get("/export/xml")
 def export_xml():
 
-    event_id=request.args.get("event_id")
+    event_id=request.args.get("scout_event_id") or request.args.get("event_id")
     match_type=request.args.get("match_type")
     match_number=int(request.args.get("match_number"))
 

@@ -89,27 +89,33 @@ background:#eee;
 </select>
 
 <label>Match Number</label>
-<input name="match_number" type="number" value="{{ match_number }}" required>
+<input name="match_number" type="number" value="{{ match_number }}">
 
 <button type="submit">Load</button>
 
-{% if scout_event_id and match_type and match_number %}
+{% if scout_event_id and match_type and pages %}
 
 <a class="download"
 href="/export/excel?scout_event_id={{ scout_event_id }}&match_type={{ match_type }}&match_number={{ match_number }}">
 Download Excel
 </a>
 
+{% if match_number %}
 <a class="download"
 href="/export/xml?scout_event_id={{ scout_event_id }}&match_type={{ match_type }}&match_number={{ match_number }}">
 Download XML
 </a>
+{% endif %}
 
 {% endif %}
 
 </form>
 
-{% if rows %}
+{% if pages %}
+
+{% for page in pages %}
+
+<h2>Match {{ page.match_number if page.match_number is not none else "Unknown" }}</h2>
 
 <div class="table-wrap">
 
@@ -120,7 +126,7 @@ Download XML
 <th>Section</th>
 <th>Field</th>
 
-{% for col in columns %}
+{% for col in page.columns %}
 <th>{{ col.label }}</th>
 {% endfor %}
 
@@ -129,7 +135,7 @@ Download XML
 
 <tbody>
 
-{% for row in rows %}
+{% for row in page.rows %}
 
 <tr>
 
@@ -149,6 +155,8 @@ Download XML
 </table>
 
 </div>
+
+{% endfor %}
 
 {% endif %}
 
