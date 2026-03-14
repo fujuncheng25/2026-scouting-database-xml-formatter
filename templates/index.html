@@ -18,6 +18,10 @@
 <div class="auth-note">Auth mode is enabled. Share links with <strong>?u=&lt;username&gt;&amp;p=&lt;password&gt;</strong> when needed.</div>
 {% endif %}
 
+{% if remote_warning %}
+<div class="error">{{ remote_warning }}</div>
+{% endif %}
+
 <form method="get" action="/" class="toolbar">
 
 <label>Scout Event ID</label>

@@ -74,6 +74,8 @@ cp .env.example .env
 
 2. Set your remote DB credentials in `.env` (`REMOTE_POSTGRES_*`).
 
+If the remote PostgreSQL runs on your host machine instead of another network host, set `REMOTE_POSTGRES_HOST=host.docker.internal` when using Docker.
+
 3. Start app + local PostgreSQL:
 
 ```bash
@@ -96,3 +98,4 @@ docker compose up --build
 - If `REQUIRE_AUTH=false`, auth links are optional.
 - The UI includes a "Create Random User URL" button for quick collaborator links.
 - This project still does not write to the formal remote database.
+- If remote sync is unavailable, the UI falls back to local cached data instead of crashing.

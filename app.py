@@ -47,6 +47,10 @@ def now_utc():
     return datetime.now(timezone.utc)
 
 
+class RemoteSyncError(Exception):
+    pass
+
+
 def get_remote_db():
     return psycopg2.connect(
         host=os.getenv("REMOTE_POSTGRES_HOST", os.getenv("POSTGRES_HOST", "localhost")),
@@ -211,7 +215,10 @@ def load_remote_rows(event_id, match_type_code, match_number=None):
     db_type = MATCH_TYPE_MAP.get(match_type_code)
     if not db_type:
         return []
-    conn = get_remote_db()
+    try:
+        conn = get_remote_db()
+    except psycopg2.OperationalError as exc:
+        raise RemoteSyncError(str(exc)) from exc
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         if match_number is None:
             cur.execute(
@@ -498,6 +505,7 @@ def index():
     pages = []
     sync_report = None
     snapshot_count = 0
+    remote_warning = None
     auth_user_param = request.args.get("u", "")
     auth_pass_param = request.args.get("p", "")
     auth_query = ""
@@ -505,7 +513,13 @@ def index():
         auth_query = f"&u={auth_user_param}&p={auth_pass_param}"
 
     if event_id and match_type:
-        sync_report = sync_remote_to_local(event_id, match_type, match_number)
+        try:
+            sync_report = sync_remote_to_local(event_id, match_type, match_number)
+        except RemoteSyncError as exc:
+            remote_warning = (
+                "Remote database sync failed. Showing local cached data only. "
+                f"Details: {exc}"
+            )
         matches, snapshot_count = fetch_effective_matches(event_id, match_type, match_number)
         pages = build_pages(matches)
 
@@ -522,6 +536,7 @@ def index():
         auth_user_param=auth_user_param,
         auth_pass_param=auth_pass_param,
         auth_query=auth_query,
+        remote_warning=remote_warning,
     )
 
 @app.get("/export/excel")
@@ -533,8 +548,13 @@ def export_excel():
     match_number_raw = (request.args.get("match_number") or "").strip()
     match_number = int(match_number_raw) if match_number_raw.isdigit() else None
     if event_id and match_type:
-        sync_remote_to_local(event_id, match_type, match_number)
+        try:
+            sync_remote_to_local(event_id, match_type, match_number)
+        except RemoteSyncError:
+            pass
     matches, _ = fetch_effective_matches(event_id, match_type, match_number)
+    if not matches:
+        return jsonify({"error": "No local cached data is available, and remote sync failed or returned no rows."}), 503
     data = create_excel(matches, match_type)
     if match_number is None:
         name = f"matches_{datetime.now().strftime('%Y%m%d')}.xlsx"
@@ -553,8 +573,13 @@ def export_xml():
     event_id = request.args.get("scout_event_id") or request.args.get("event_id")
     match_type = normalize_match_code(request.args.get("match_type"))
     match_number = int(request.args.get("match_number"))
-    sync_remote_to_local(event_id, match_type, match_number)
+    try:
+        sync_remote_to_local(event_id, match_type, match_number)
+    except RemoteSyncError:
+        pass
     matches, _ = fetch_effective_matches(event_id, match_type, match_number)
+    if not matches:
+        return jsonify({"error": "No local cached data is available, and remote sync failed or returned no rows."}), 503
     match = matches.get(match_number, {"red": [], "blue": []})
     data = create_xml(match)
     name = f"match_{match_number}_{datetime.now().strftime('%Y%m%d')}.xml"
@@ -580,7 +605,10 @@ def api_sync():
     if not event_id or not match_type:
         return jsonify({"error": "scout_event_id and match_type are required"}), 400
 
-    report = sync_remote_to_local(event_id, match_type, match_number)
+    try:
+        report = sync_remote_to_local(event_id, match_type, match_number)
+    except RemoteSyncError as exc:
+        return jsonify({"error": f"Remote sync failed: {exc}"}), 503
     return jsonify({"ok": True, "report": report})
 
 
