@@ -1,46 +1,23 @@
 body {
   margin: 0;
-  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-  color: #122033;
-  background:
-    radial-gradient(circle at 10% 10%, #ffefd9 0%, transparent 35%),
-    radial-gradient(circle at 85% 5%, #d7f2ff 0%, transparent 35%),
-    linear-gradient(160deg, #f4f7ff 0%, #f7fbff 60%, #f2faf4 100%);
+  font-family: Arial, sans-serif;
+  background: #f7f7f8;
+  color: #111;
 }
 
 .container {
-  max-width: 1500px;
-  margin: 24px auto 36px;
+  max-width: 1400px;
+  margin: 24px auto;
   padding: 0 16px;
 }
 
 h1 {
-  margin: 0;
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
-  letter-spacing: 0.01em;
+  margin-bottom: 8px;
 }
 
 .hint {
-  margin: 10px 0 16px;
-  color: #355071;
-}
-
-.auth-note {
-  margin-bottom: 14px;
-  border: 1px solid #bed8f8;
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: #f1f8ff;
-  color: #264d71;
-}
-
-.error {
-  margin-bottom: 14px;
-  border: 1px solid #f0c6a2;
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: #fff5e8;
-  color: #8a4b19;
+  margin-top: 0;
+  color: #444;
 }
 
 .toolbar {
@@ -48,162 +25,66 @@ h1 {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin: 8px 0 16px;
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid #d8e2f1;
-  border-radius: 12px;
-  padding: 12px;
-}
-
-input,
-select,
-button,
-.download {
-  padding: 8px 10px;
-  border: 1px solid #b9c5d8;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #123054;
-  font: inherit;
+  margin: 14px 0 16px;
 }
 
 input {
-  min-width: 140px;
+  min-width: 320px;
+  padding: 8px;
 }
 
 button,
-.download {
-  cursor: pointer;
-  text-decoration: none;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-button:hover,
-.download:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 7px rgba(36, 63, 97, 0.15);
-}
-
-.status-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 12px;
-  color: #233e5b;
-}
-
-.error-text {
-  color: #b32424;
-  font-weight: 700;
-}
-
-.tips {
-  margin-bottom: 16px;
-  border: 1px solid #d7e4f6;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.8);
+.download,
+.match-link {
   padding: 8px 12px;
+  border: 1px solid #bbb;
+  background: white;
+  text-decoration: none;
+  color: #111;
+  border-radius: 4px;
 }
 
-h2 {
-  margin-bottom: 8px;
-  margin-top: 22px;
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+.match-link.active {
+  background: #111;
+  color: white;
 }
 
 .table-wrap {
-  overflow: auto;
-  border: 1px solid #d6e0ef;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 8px 30px rgba(25, 55, 89, 0.08);
+  overflow-x: auto;
+  background: white;
+  border: 1px solid #d8d8d8;
 }
 
 table {
-  border-collapse: separate;
-  border-spacing: 0;
-  min-width: 1200px;
+  border-collapse: collapse;
+  min-width: 1100px;
   width: 100%;
 }
 
 th,
 td {
-  border-right: 1px solid #deebf8;
-  border-bottom: 1px solid #deebf8;
+  border: 1px solid #e3e3e3;
   padding: 8px;
   text-align: left;
+  vertical-align: top;
   white-space: nowrap;
 }
 
 thead th {
   position: sticky;
   top: 0;
-  z-index: 3;
-  background: #eff5fc;
+  background: #fafafa;
 }
 
-.sticky-col {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: #f9fcff;
-  min-width: 130px;
-  box-shadow: 1px 0 0 #deebf8;
+.error {
+  border: 1px solid #c96;
+  background: #fff5e5;
+  padding: 10px;
 }
 
-.sticky-col.secondary {
-  left: 130px;
-  min-width: 170px;
-  background: #f4f9ff;
-}
-
-thead .sticky-col {
-  z-index: 4;
-  background: #e7f1fb;
-}
-
-.sheet-cell {
-  min-width: 140px;
-}
-
-.editable-cell {
-  background: #fffef8;
-  outline: none;
-  transition: background 0.2s ease;
-}
-
-.editable-cell:focus {
-  background: #fff9df;
-  box-shadow: inset 0 0 0 2px #8db8ff;
-}
-
-.editable-cell.saving {
-  background: #eef7ff;
-}
-
-.editable-cell.saved {
-  background: #e8ffec;
-}
-
-.editable-cell.save-error {
-  background: #ffeaea;
-}
-
-@media (max-width: 900px) {
-  .toolbar {
-    align-items: stretch;
-  }
-
-  input,
-  select,
-  button,
-  .download {
-    width: 100%;
-  }
-
-  .sticky-col,
-  .sticky-col.secondary {
-    position: static;
-    box-shadow: none;
-  }
+.match-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
 }

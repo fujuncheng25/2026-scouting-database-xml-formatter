@@ -3,34 +3,81 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scouting Sheet Local Editor</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<title>Team Match Record Exporter</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f4f4f4;
+margin:0;
+}
+
+.container{
+width:1200px;
+margin:auto;
+padding:30px;
+}
+
+.toolbar{
+display:flex;
+gap:10px;
+align-items:center;
+margin-bottom:20px;
+}
+
+input,select{
+padding:6px;
+}
+
+button{
+padding:6px 12px;
+cursor:pointer;
+}
+
+.download{
+padding:6px 12px;
+background:#3578ff;
+color:white;
+text-decoration:none;
+border-radius:4px;
+}
+
+.table-wrap{
+overflow:auto;
+background:white;
+padding:10px;
+}
+
+table{
+border-collapse:collapse;
+width:100%;
+}
+
+th,td{
+border:1px solid #ccc;
+padding:6px;
+text-align:center;
+}
+
+thead{
+background:#eee;
+}
+
+</style>
+
 </head>
 
 <body>
 
 <main class="container">
 
-<h1>Scouting Sheet Local Editor</h1>
-<p class="hint">Remote data syncs into this project's local PostgreSQL cache. Edits save locally and never write to the formal remote database.</p>
-
-{% if require_auth %}
-<div class="auth-note">Auth mode is enabled. Share links with <strong>?u=&lt;username&gt;&amp;p=&lt;password&gt;</strong> when needed.</div>
-{% endif %}
-
-{% if remote_warning %}
-<div class="error">{{ remote_warning }}</div>
-{% endif %}
+<h1>Team Match Record Exporter</h1>
 
 <form method="get" action="/" class="toolbar">
 
 <label>Scout Event ID</label>
-<input name="scout_event_id" value="{{ scout_event_id or '' }}" required>
-
-{% if auth_user_param and auth_pass_param %}
-<input type="hidden" name="u" value="{{ auth_user_param }}">
-<input type="hidden" name="p" value="{{ auth_pass_param }}">
-{% endif %}
+<input name="scout_event_id" value="{{ scout_event_id }}" required>
 
 <label>Match Type</label>
 <select name="match_type" required>
@@ -45,19 +92,17 @@
 <input name="match_number" type="number" value="{{ match_number }}">
 
 <button type="submit">Load</button>
-<button type="button" id="sync-btn">Sync Remote -> Local</button>
-<button type="button" id="bootstrap-btn">Create Random User URL</button>
 
 {% if scout_event_id and match_type and pages %}
 
 <a class="download"
-href="/export/excel?scout_event_id={{ scout_event_id }}&match_type={{ match_type }}&match_number={{ match_number }}{{ auth_query }}">
+href="/export/excel?scout_event_id={{ scout_event_id }}&match_type={{ match_type }}&match_number={{ match_number }}">
 Download Excel
 </a>
 
 {% if match_number %}
 <a class="download"
-href="/export/xml?scout_event_id={{ scout_event_id }}&match_type={{ match_type }}&match_number={{ match_number }}{{ auth_query }}">
+href="/export/xml?scout_event_id={{ scout_event_id }}&match_type={{ match_type }}&match_number={{ match_number }}">
 Download XML
 </a>
 {% endif %}
@@ -65,23 +110,6 @@ Download XML
 {% endif %}
 
 </form>
-
-<div class="status-row">
-	<span>Current actor: <strong>{{ actor }}</strong></span>
-	{% if sync_report %}
-	<span>Synced rows: <strong>{{ sync_report.synced }}</strong></span>
-	<span>Changed rows merged from remote: <strong>{{ sync_report.updated_remote_records }}</strong></span>
-	{% endif %}
-	{% if snapshot_count %}
-	<span>Local snapshot rows available: <strong>{{ snapshot_count }}</strong></span>
-	{% endif %}
-	<span id="live-status">Idle</span>
-</div>
-
-<details class="tips">
-	<summary>How merge priority works</summary>
-	<p>The most recent layer wins. Local edits are shown by default, but if remote data changes and then sync runs later, the newer remote value overrides older local edits.</p>
-</details>
 
 {% if pages %}
 
@@ -95,8 +123,8 @@ Download XML
 
 <thead>
 <tr>
-<th class="sticky-col">Section</th>
-<th class="sticky-col secondary">Field</th>
+<th>Section</th>
+<th>Field</th>
 
 {% for col in page.columns %}
 <th>{{ col.label }}</th>
@@ -111,19 +139,11 @@ Download XML
 
 <tr>
 
-<td class="sticky-col">{{ row.section }}</td>
-<td class="sticky-col secondary">{{ row.field }}</td>
+<td>{{ row[0] }}</td>
+<td>{{ row[1] }}</td>
 
-{% for cell in row.cells %}
-<td
-	class="sheet-cell{% if cell.editable %} editable-cell{% endif %}"
-	{% if cell.editable %}
-	contenteditable="true"
-	data-record-id="{{ cell.record_id }}"
-	data-field-key="{{ cell.field_key }}"
-	spellcheck="false"
-	{% endif %}
->{{ cell.value }}</td>
+{% for cell in row[2:] %}
+<td>{{ cell }}</td>
 {% endfor %}
 
 </tr>
@@ -139,110 +159,6 @@ Download XML
 {% endfor %}
 
 {% endif %}
-
-<script>
-const statusNode = document.getElementById("live-status");
-const syncBtn = document.getElementById("sync-btn");
-const bootstrapBtn = document.getElementById("bootstrap-btn");
-
-function setStatus(text, isError = false) {
-	statusNode.textContent = text;
-	statusNode.classList.toggle("error-text", isError);
-}
-
-function currentAuthQuery() {
-	const params = new URLSearchParams(window.location.search);
-	const query = new URLSearchParams();
-	if (params.get("u")) query.set("u", params.get("u"));
-	if (params.get("p")) query.set("p", params.get("p"));
-	return query.toString();
-}
-
-async function postJson(path, data) {
-	const authQuery = currentAuthQuery();
-	const url = authQuery ? `${path}?${authQuery}` : path;
-	const response = await fetch(url, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(data)
-	});
-	const payload = await response.json();
-	if (!response.ok) {
-		throw new Error(payload.error || "Request failed");
-	}
-	return payload;
-}
-
-const debounceByCell = new Map();
-document.querySelectorAll(".editable-cell").forEach((cell) => {
-	const saveNow = async () => {
-		const recordId = cell.dataset.recordId;
-		const fieldKey = cell.dataset.fieldKey;
-		const fieldValue = cell.textContent.trim();
-		cell.classList.add("saving");
-		setStatus(`Saving ${fieldKey}...`);
-		try {
-			await postJson("/api/edit", {
-				record_id: recordId,
-				field_key: fieldKey,
-				field_value: fieldValue
-			});
-			cell.classList.remove("saving");
-			cell.classList.add("saved");
-			setStatus(`Saved ${fieldKey} locally at ${new Date().toLocaleTimeString()}`);
-			setTimeout(() => cell.classList.remove("saved"), 700);
-		} catch (error) {
-			cell.classList.remove("saving");
-			cell.classList.add("save-error");
-			setStatus(error.message, true);
-			setTimeout(() => cell.classList.remove("save-error"), 1500);
-		}
-	};
-
-	cell.addEventListener("input", () => {
-		const key = `${cell.dataset.recordId}:${cell.dataset.fieldKey}`;
-		clearTimeout(debounceByCell.get(key));
-		debounceByCell.set(key, setTimeout(saveNow, 450));
-	});
-});
-
-syncBtn.addEventListener("click", async () => {
-	const form = new FormData(document.querySelector("form.toolbar"));
-	if (!form.get("scout_event_id") || !form.get("match_type")) {
-		setStatus("scout_event_id and match_type are required before sync", true);
-		return;
-	}
-	syncBtn.disabled = true;
-	setStatus("Syncing remote data into local database...");
-	try {
-		await postJson("/api/sync", {
-			scout_event_id: form.get("scout_event_id"),
-			match_type: form.get("match_type"),
-			match_number: form.get("match_number")
-		});
-		setStatus("Sync complete. Reloading view...");
-		window.location.reload();
-	} catch (error) {
-		setStatus(error.message, true);
-	} finally {
-		syncBtn.disabled = false;
-	}
-});
-
-bootstrapBtn.addEventListener("click", async () => {
-	bootstrapBtn.disabled = true;
-	setStatus("Creating random viewer credentials...");
-	try {
-		const payload = await postJson("/auth/bootstrap", {});
-		setStatus(`User created: ${payload.username}`);
-		window.prompt("Share this local access URL", payload.access_url);
-	} catch (error) {
-		setStatus(error.message, true);
-	} finally {
-		bootstrapBtn.disabled = false;
-	}
-});
-</script>
 
 </main>
 
